@@ -53,6 +53,7 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             
             {/* Logo Section with Glass Effect */}
+            <link href="https://api.fontshare.com/v2/css?f[]=chillax@1&display=swap" rel="stylesheet">
             <Link href="/" className="flex items-center space-x-3 group">
               <div 
                 className={`relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden transition-all duration-300 ${
