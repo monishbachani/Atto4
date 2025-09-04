@@ -32,6 +32,9 @@ body {
 }
 
 /* Apple TV-like scrollbars */
+.text-xl{
+  font-family: 'Chillax', sans-serif;
+}
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
