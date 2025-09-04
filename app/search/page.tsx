@@ -5,18 +5,17 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Search, Loader2 } from 'lucide-react';
-import { tmdbApi } from '@/lib/api/tmdb';
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q') || '';
 
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   // Helper function to build TMDB image URLs
-  const buildTmdbImage = (path, size = 'w500') => {
+  const buildTmdbImage = (path: string, size = 'w500') => {
     if (!path) return '/placeholder-movie.jpg';
     return `https://image.tmdb.org/t/p/${size}${path}`;
   };
@@ -32,18 +31,23 @@ export default function SearchPage() {
       setError('');
       
       try {
-        const data = await tmdbApi.searchMulti(query);
-        
+        // ✅ Call our proxy API instead of TMDB directly
+        const res = await fetch(`/api/tmdb/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+        const data = await res.json();
+
         if (data?.results) {
           // Filter and sort results
           const filtered = data.results
-            .filter(item => 
-              (item.media_type === 'movie' || item.media_type === 'tv') &&
-              item.poster_path && // Only show items with posters
-              item.popularity > 0
+            .filter(
+              (item: any) =>
+                (item.media_type === 'movie' || item.media_type === 'tv') &&
+                item.poster_path &&
+                item.popularity > 0
             )
-            .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-          
+            .sort((a: any, b: any) => (b.popularity || 0) - (a.popularity || 0));
+
           setResults(filtered);
         } else {
           setResults([]);
@@ -88,8 +92,8 @@ export default function SearchPage() {
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <p className="text-red-400 mb-2">{error}</p>
-              <button 
-                onClick={() => window.location.reload()} 
+              <button
+                onClick={() => window.location.reload()}
                 className="text-blue-400 hover:text-blue-300 underline"
               >
                 Try Again
@@ -133,8 +137,6 @@ export default function SearchPage() {
                       fill
                       className="object-cover"
                       sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 200px"
-                      placeholder="blur"
-                      blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQ1MCIgdmlld0JveD0iMCAwIDMwMCA0NTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iNDUwIiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0xNTAgMTgwQzE2MS4wNDYgMTgwIDE3MCAyMDMuOTA5IDE3MCAyMzNDMTcwIDI2Mi4wOTEgMTYxLjA0NiAyODYgMTUwIDI4NkMxMzguOTU0IDI4NiAxMzAgMjYyLjA5MSAxMzAgMjMzQzEzMCAyMDMuOTA5IDEzOC45NTQgMTgwIDE1MCAxODBaIiBmaWxsPSIjNkI3Mjg4Ii8+CjxwYXRoIGQ9Ik0xOTAgMjMwSDE5NUMxOTUgMjI0LjQ3NyAxOTAuNTIzIDIyMCAxODUgMjIwSDE4NUMxNzkuNDc3IDIyMCAxNzUgMjI0LjQ3NyAxNzUgMjMwSDE4MEMxODAgMjM1LjUyMyAxODQuNDc3IDI0MCAxOTAgMjQwWiIgZmlsbD0iIzZCNzI4OCIvPgo8L3N2Zz4K"
                     />
                     
                     {/* Simple Rating Badge */}

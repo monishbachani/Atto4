@@ -13,8 +13,8 @@ export interface VideoSource {
 /** Read and normalize environment variables */
 const ENV = {
   BASE: (process.env.NEXT_PUBLIC_VIDEO_API_BASE || "").trim(),
-  E1: (process.env.NEXT_PUBLIC_VIDEO_EMBED_1 || "https://111movies.com/${type}/${id}/1/1?autoplay=1&theme=23ddc36c&autoNext=1").trim(),
-  E2: (process.env.NEXT_PUBLIC_VIDEO_EMBED_2 || "https://111movies.com/${type}/${id}?autoplay=1&theme=23ddc36c&autoNext=1").trim(),
+  E1: (process.env.NEXT_PUBLIC_VIDEO_EMBED_1 || "https://vidlink.pro/tv/${id}/${season}/${episode}?startAt=60&primaryColor=3a86ff&autoplay=true&nextbutton=true&sub_file=https://example.com/subtitles.vtt&sub_label=English").trim(),
+  E2: (process.env.NEXT_PUBLIC_VIDEO_EMBED_2 || "https://vidlink.pro/movie/${id}?startAt=60&primaryColor=3a86ff&autoplay=true&nextbutton=true&sub_file=https://example.com/subtitles.vtt&sub_label=English").trim(),
   E3: (process.env.NEXT_PUBLIC_VIDEO_EMBED_3 || "").trim(),
   E4: (process.env.NEXT_PUBLIC_VIDEO_EMBED_4 || "").trim(),
 };

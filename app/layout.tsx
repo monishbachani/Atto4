@@ -11,41 +11,41 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: SITE_CONFIG.name,
-    template: `%s | ${SITE_CONFIG.name}`,
+    default: 'Atto4',
+    template: `%s | Atto4`,
   },
   description: SITE_CONFIG.description,
   keywords: ['streaming', 'movies', 'tv shows', 'entertainment', 'watch online'],
   authors: [
     {
-      name: 'Bradfilx',
+      name: 'Atto4',
       url: SITE_CONFIG.url,
     },
   ],
-  creator: SITE_CONFIG.creator,
+  creator: 'Atto4',
   metadataBase: new URL(SITE_CONFIG.url),
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: SITE_CONFIG.url,
-    title: SITE_CONFIG.name,
+    title: 'Atto4',
     description: SITE_CONFIG.description,
-    siteName: SITE_CONFIG.name,
+    siteName: 'Atto4',
     images: [
       {
         url: SITE_CONFIG.ogImage,
         width: 1200,
         height: 630,
-        alt: SITE_CONFIG.name,
+        alt: 'Atto4',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: SITE_CONFIG.name,
+    title: 'Atto4',
     description: SITE_CONFIG.description,
     images: [SITE_CONFIG.ogImage],
-    creator: SITE_CONFIG.creator,
+    creator: 'Atto4',
   },
   icons: {
     icon: '/favicon.ico',

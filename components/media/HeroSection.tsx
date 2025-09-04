@@ -103,14 +103,11 @@ export default function HeroSection({ media }: HeroSectionProps) {
               </span>
             )}
             {currentMovie.vote_average && (
-              <div className="flex items-center gap-1 bg-yellow-500/90 text-black px-3 py-1 rounded-full text-xs font-bold">
+              <div className="flex items-center gap-1 bg-neutral-900/90 text-white px-3 py-1 rounded-full text-xs font-bold">
                 <span>⭐</span>
                 <span>{currentMovie.vote_average.toFixed(1)}</span>
               </div>
             )}
-            <span className="bg-green-600/80 px-3 py-1 rounded-full text-xs">
-              HD
-            </span>
           </div>
 
           {/* Overview */}

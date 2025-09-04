@@ -297,6 +297,32 @@ export const tmdbApi = {
     }
   },
 
+  // NEW METHOD: Get detailed season information with episodes
+  async getTVSeasonDetails(tvId: number, seasonNumber: number): Promise<any | null> {
+    try {
+      const data = await request(`/tv/${tvId}/season/${seasonNumber}`, {
+        language: 'en-US',
+      });
+      return data || null;
+    } catch (error) {
+      console.warn(`[tmdbApi] getTVSeasonDetails failed for TV ${tvId} season ${seasonNumber}:`, (error as Error).message);
+      return null;
+    }
+  },
+
+  // NEW METHOD: Get specific episode details
+  async getTVEpisodeDetails(tvId: number, seasonNumber: number, episodeNumber: number): Promise<any | null> {
+    try {
+      const data = await request(`/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}`, {
+        language: 'en-US',
+      });
+      return data || null;
+    } catch (error) {
+      console.warn(`[tmdbApi] getTVEpisodeDetails failed for TV ${tvId} S${seasonNumber}E${episodeNumber}:`, (error as Error).message);
+      return null;
+    }
+  },
+
   async getMovieGenres(): Promise<Genre[]> {
     try {
       const data = await request<{ genres: Genre[] }>('/genre/movie/list');

@@ -4,12 +4,14 @@ import { useState, useEffect, useRef } from 'react';
 import { videoApi } from '@/lib/api/video-api';
 import type { VideoSource } from '@/lib/api/video-api';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
 
 interface VideoPlayerProps {
   mediaId: number;
   mediaType: 'movie' | 'tv';
   season?: number;
   episode?: number;
+  title?: string; // NEW: optional title to show beside back button
   onClose?: () => void;
 }
 
@@ -18,6 +20,7 @@ export default function VideoPlayer({
   mediaType,
   season,
   episode,
+  title,
   onClose
 }: VideoPlayerProps) {
   const [embedUrl, setEmbedUrl] = useState<string>('');
@@ -74,12 +77,9 @@ export default function VideoPlayer({
   // Find first working source
   const findWorkingSource = async (videoSources: VideoSource[]): Promise<number | null> => {
     setIsTesting(true);
-    
     for (let i = 0; i < videoSources.length; i++) {
       console.log(`Testing source ${i + 1}/${videoSources.length}: ${videoSources[i].servers}`);
-      
       const isWorking = await testSource(videoSources[i].url);
-      
       if (isWorking) {
         console.log(`✓ Source ${i + 1} working: ${videoSources[i].servers}`);
         setIsTesting(false);
@@ -88,7 +88,6 @@ export default function VideoPlayer({
         console.log(`✗ Source ${i + 1} failed: ${videoSources[i].servers}`);
       }
     }
-    
     setIsTesting(false);
     return null;
   };
@@ -103,7 +102,6 @@ export default function VideoPlayer({
       setEmbedUrl('');
 
       try {
-        // Load sources from API
         const videoSources = mediaType === 'movie'
           ? await videoApi.getMovieSources(mediaId)
           : await videoApi.getTVSources(mediaId, season || 1, episode || 1);
@@ -149,7 +147,6 @@ export default function VideoPlayer({
 
         // Client-side fallback
         const workingIndex = await findWorkingSource(videoSources);
-        
         if (cancelled) return;
 
         if (workingIndex !== null) {
@@ -184,19 +181,14 @@ export default function VideoPlayer({
   // Handle iframe error - try next source
   const handleIframeError = async () => {
     console.warn(`Iframe error on source: ${sources[currentSourceIndex]?.servers}`);
-    
     const remainingSources = sources.slice(currentSourceIndex + 1);
-    
     if (remainingSources.length === 0) {
       setError('All video sources failed to load');
       return;
     }
-
-    // Test remaining sources
     for (let i = 0; i < remainingSources.length; i++) {
       const absoluteIndex = currentSourceIndex + 1 + i;
       const isWorking = await testSource(remainingSources[i].url, 5000);
-      
       if (isWorking) {
         console.log(`Switching to source ${absoluteIndex + 1}: ${sources[absoluteIndex].servers}`);
         setCurrentSourceIndex(absoluteIndex);
@@ -205,7 +197,6 @@ export default function VideoPlayer({
         return;
       }
     }
-
     setError('All video sources failed to load');
   };
 
@@ -217,21 +208,15 @@ export default function VideoPlayer({
 
   // Handle close
   const handleClose = () => {
-    if (onClose) {
-      onClose();
-    } else {
-      router.back();
-    }
+    if (onClose) onClose();
+    else router.back();
   };
 
   // Handle ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClose();
-      }
+      if (e.key === 'Escape') handleClose();
     };
-
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
@@ -246,13 +231,9 @@ export default function VideoPlayer({
             <p className="text-xl mb-2">
               {isTesting ? 'Testing video sources...' : 'Loading video sources...'}
             </p>
-            <p className="text-sm text-gray-400">
-              Finding the best server for you
-            </p>
+            <p className="text-sm text-gray-400">Finding the best server for you</p>
             {sources.length > 0 && (
-              <p className="text-xs text-gray-500 mt-2">
-                {sources.length} sources available
-              </p>
+              <p className="text-xs text-gray-500 mt-2">{sources.length} sources available</p>
             )}
           </div>
         </div>
@@ -266,11 +247,8 @@ export default function VideoPlayer({
             <h2 className="text-2xl font-bold mb-4">Unable to Play Video</h2>
             <p className="text-gray-300 mb-4">{error}</p>
             {sources.length > 0 && (
-              <p className="text-sm text-gray-400 mb-6">
-                Tested {sources.length} different servers
-              </p>
+              <p className="text-sm text-gray-400 mb-6">Tested {sources.length} different servers</p>
             )}
-            
             <button
               onClick={handleClose}
               className="px-8 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
@@ -295,22 +273,28 @@ export default function VideoPlayer({
             style={{ border: 'none' }}
           />
 
+          {/* NEW: Top-left Back + Title */}
+          <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
+            <button
+              onClick={handleClose}
+              className="p-2 rounded-full bg-black/60 backdrop-blur-sm text-white hover:bg-black/80 transition-colors"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+            {title && (
+              <h1 className="text-white font-extrabold text-lg sm:text-xl truncate max-w-xs sm:max-w-md">
+                {title}
+              </h1>
+            )}
+          </div>
+
           {/* Controls Overlay */}
           <div className="absolute top-4 right-4 text-white/70 text-sm pointer-events-none">
             Auto-switch enabled — Press ESC to exit
           </div>
 
-          {/* Development Debug Info */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="absolute bottom-4 left-4 bg-black/70 text-white px-4 py-2 rounded-lg text-sm backdrop-blur-sm">
-              <div className="font-mono">
-                Server: {sources[currentSourceIndex]?.servers}
-              </div>
-              <div className="text-xs text-gray-300 mt-1">
-                Source {currentSourceIndex + 1} of {sources.length}
-              </div>
-            </div>
-          )}
+          {/* REMOVED the bottom-left server debug panel */}
         </>
       )}
     </div>

@@ -16,13 +16,34 @@ async function fetchTv(id: string) {
   ]);
   
   const tv = d.status === 'fulfilled' ? d.value : null;
-  const gen = g.status === 'fulfilled' ? g.value : [];
-  return tv && tv.id ? { tv, genres: gen } : null;
+  const genres = g.status === 'fulfilled' ? g.value : [];
+  
+  if (!tv || !tv.id) return null;
+
+  // Fetch detailed season information with episodes
+  const seasonsWithEpisodes = await Promise.allSettled(
+    tv.seasons?.map(async (season: any) => {
+      if (season.season_number === 0) return null; // Skip specials for now
+      try {
+        const seasonDetails = await tmdbApi.getTVSeasonDetails(tv.id, season.season_number);
+        return seasonDetails;
+      } catch (error) {
+        console.error(`Failed to fetch season ${season.season_number}:`, error);
+        return season; // Return basic season info if detailed fetch fails
+      }
+    }) || []
+  );
+
+  const seasons = seasonsWithEpisodes
+    .map(result => result.status === 'fulfilled' ? result.value : null)
+    .filter(Boolean);
+
+  return { tv, genres, seasons };
 }
 
 /* ---------- page ---------- */
 export default async function TvPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params; // Await params here
+  const { id } = await params;
   const data = await fetchTv(id);
   
   if (!data) notFound();
@@ -31,7 +52,11 @@ export default async function TvPage({ params }: { params: Promise<{ id: string 
     <ErrorBoundary fallback={<ErrorBlock />}>
       <main className="min-h-screen bg-gradient-to-b from-black via-gray-900 to-black">
         <Suspense fallback={<FullLoader />}>
-          <TvShowDetailsClient tv={data.tv} genres={data.genres} />
+          <TvShowDetailsClient 
+            tv={data.tv} 
+            genres={data.genres} 
+            seasons={data.seasons}
+          />
         </Suspense>
       </main>
     </ErrorBoundary>
@@ -40,7 +65,7 @@ export default async function TvPage({ params }: { params: Promise<{ id: string 
 
 /* ---------- metadata ---------- */
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params; // Await params here too
+  const { id } = await params;
   const data = await fetchTv(id);
   
   if (!data) {
@@ -53,7 +78,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-/* ---------- tiny helpers ---------- */
+/* ---------- helpers ---------- */
 function FullLoader() {
   return (
     <div className="flex h-screen items-center justify-center bg-black">
