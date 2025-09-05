@@ -184,7 +184,7 @@ export default function Header() {
                       onClick={() => setIsMobileMenuOpen(false)}
                       style={{
                         animationDelay: `${index * 0.1}s`,
-                        animation: 'slideInRight 0.3s ease-out forwards'
+                        animation: 'ToptoBottom 0.3s ease-out forwards'
                       }}
                     >
                       <Icon className="w-5 h-5" />
