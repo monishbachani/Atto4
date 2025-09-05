@@ -41,12 +41,12 @@ export default function Header() {
 
   return (
     <>
-      {/* Main Header with CSS classes from globals.css */}
+      {/* Main Header */}
       <header className={`fixed top-0 left-0 right-0 z-50 header-glass ${scrolled ? 'scrolled' : ''}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
-            {/* Logo Section with Enhanced Glass Effect */}
+            {/* Logo Section */}
             <Link href="/" className="flex items-center space-x-3 group">
               <div className="glass-card relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden p-1 transform transition-all duration-300 hover:scale-110 hover:rotate-2">
                 <div className="w-full h-full rounded-lg overflow-hidden">
@@ -59,12 +59,12 @@ export default function Header() {
                   />
                 </div>
               </div>
-              <span className="font-chillax text-xl sm:text-2xl font-bold text-white transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
+              <span className="font-chillax text-xl sm:text-2xl font-bold text-white uppercase transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
                 Atto4
               </span>
             </Link>
 
-            {/* Desktop Navigation with Glass Cards */}
+            {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center space-x-2">
               {navigationItems.map((item) => {
                 const Icon = item.icon;
@@ -79,7 +79,7 @@ export default function Header() {
                           : 'text-white hover:text-blue-300'
                       }`}>
                         <Icon className="w-4 h-4" />
-                        <span>{item.label}</span>
+                        <span className="uppercase text-sm font-semibold">{item.label}</span>
                       </div>
                     </Link>
                   </div>
@@ -87,7 +87,7 @@ export default function Header() {
               })}
             </nav>
 
-            {/* Action Buttons with Glass Effect */}
+            {/* Action Buttons */}
             <div className="flex items-center space-x-2">
               {/* Search Button */}
               <Button
@@ -135,7 +135,7 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Search Overlay with Glass Strong Effect */}
+      {/* Search Overlay */}
       <div
         className={`fixed top-16 left-0 right-0 z-40 transition-all duration-300 ${
           isSearchOpen 
@@ -151,23 +151,32 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Mobile Menu Overlay with Glass Effects */}
+      {/* TOP DROPDOWN MOBILE MENU - Replaces Right Sidebar */}
       {isMobileMenuOpen && (
         <>
-          {/* Glass Backdrop */}
+          {/* Backdrop */}
           <div
-            className="fixed inset-0 z-30 glass md:hidden"
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
             style={{ animation: 'fadeIn 0.3s ease-out forwards' }}
           />
           
-          {/* Glass Mobile Menu */}
-          <div
-            className="fixed top-16 right-0 bottom-0 z-40 w-80 max-w-[85vw] glass-strong border-l border-white/10 md:hidden"
-            style={{ animation: 'slideInFromTop 0.3s ease-out forwards' }}
-          >
-            <div className="p-6 space-y-6">
-              <nav className="space-y-1">
+          {/* Top Dropdown Menu */}
+          <div className="mobile-top-menu fixed top-16 left-0 right-0 z-40 glass-strong border-b border-white/10 shadow-2xl md:hidden">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+              
+              {/* Close Button */}
+              <div className="flex justify-end mb-6">
+                <button
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="glass-card p-2 rounded-lg text-white hover:text-blue-300 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Navigation Grid */}
+              <div className="grid grid-cols-1 gap-4">
                 {navigationItems.map((item, index) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
@@ -176,40 +185,52 @@ export default function Header() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`glass-card flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                      className={`mobile-menu-item glass-card flex items-center space-x-4 p-4 rounded-xl font-medium transition-all duration-200 ${
                         isActive 
-                          ? 'glass-glow text-blue-400 bg-blue-500/20' 
-                          : 'text-white hover:text-blue-300'
+                          ? 'glass-glow text-blue-400 bg-blue-500/20 border border-blue-400/30' 
+                          : 'text-white hover:text-blue-300 hover:bg-white/5'
                       }`}
                       onClick={() => setIsMobileMenuOpen(false)}
-                      style={{
-                        animationDelay: `${index * 0.1}s`,
-                        animation: 'slideInFromTop 0.3s ease-out forwards'
-                      }}
                     >
-                      <Icon className="w-5 h-5" />
-                      <span>{item.label}</span>
+                      <Icon className="w-6 h-6" />
+                      <span className="uppercase text-lg font-semibold tracking-wide">
+                        {item.label}
+                      </span>
                     </Link>
                   );
                 })}
-              </nav>
 
-              {/* Mobile Login Button with Glass Effect */}
-              <div className="pt-4 border-t border-white/10">
+                {/* Login Button */}
                 <button
                   onClick={() => {
                     router.push('/login');
                     setIsMobileMenuOpen(false);
                   }}
-                  className="glass-card flex items-center space-x-3 w-full px-4 py-3 rounded-xl font-medium text-white hover:text-blue-300 transition-all duration-200"
-                  style={{
-                    animationDelay: '0.4s',
-                    animation: 'slideInFromTop 0.3s ease-out forwards'
-                  }}
+                  className="mobile-menu-item glass-card flex items-center space-x-4 p-4 rounded-xl font-medium text-white hover:text-blue-300 hover:bg-white/5 transition-all duration-200"
                 >
-                  <User className="w-5 h-5" />
-                  <span>Login</span>
+                  <User className="w-6 h-6" />
+                  <span className="uppercase text-lg font-semibold tracking-wide">
+                    Login
+                  </span>
                 </button>
+              </div>
+
+              {/* Optional: Quick Actions Row */}
+              <div className="mt-8 pt-6 border-t border-white/10">
+                <div className="flex justify-center space-x-4">
+                  <button 
+                    onClick={() => setIsSearchOpen(true)}
+                    className="glass-card p-3 rounded-lg text-white hover:text-blue-300 transition-colors"
+                  >
+                    <Search className="w-5 h-5" />
+                  </button>
+                  <button 
+                    onClick={() => router.push('/watchlist')}
+                    className="glass-card p-3 rounded-lg text-white hover:text-blue-300 transition-colors"
+                  >
+                    <Film className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -218,3 +239,4 @@ export default function Header() {
     </>
   );
 }
+
