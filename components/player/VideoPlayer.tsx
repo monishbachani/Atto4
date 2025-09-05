@@ -13,18 +13,14 @@ interface VideoPlayerProps {
   episode?: number;
   title?: string;
   onClose?: () => void;
+  /**
+   * If true, prefer proxied URLs (server-side proxy) over direct URLs.
+   * Default: true (use proxy always)
+   */
+  preferProxy?: boolean;
 }
 
-/**
- * NOTE: this type models the merged route's response shape.
- * allUrls[] entries contain:
- * - provider
- * - proxied (the URL the frontend should try; may be original direct URL or a proxied URL)
- * - originalUrl
- * - usedProxy (boolean)
- * - direct: { ok, status, responseTime, bodySnippet } | null
- * - proxy: { ok, status, responseTime, bodySnippet } | null
- */
+/* Server response item shape (merged route) */
 type ServerAllUrl = {
   provider: string;
   type?: string;
@@ -51,7 +47,8 @@ export default function VideoPlayer({
   season,
   episode,
   title,
-  onClose
+  onClose,
+  preferProxy = true
 }: VideoPlayerProps) {
   const [embedUrl, setEmbedUrl] = useState<string>('');
   const [sources, setSources] = useState<VideoSource[]>([]);
@@ -106,7 +103,7 @@ export default function VideoPlayer({
     });
   };
 
-  // Load and coordinate sources with merged route
+  // Load and coordinate sources with merged route (now supports preferProxy)
   useEffect(() => {
     let cancelled = false;
 
@@ -127,8 +124,8 @@ export default function VideoPlayer({
         if (cancelled) return;
         setSources(videoSources || []);
 
-        // 2) Query the merged check-embed API
-        console.log(`🔍 Checking embed URLs for ${mediaType} ${mediaId}${mediaType === 'tv' ? ` S${season}E${episode}` : ''}...`);
+        // 2) Query the merged check-embed API and tell it our preference
+        console.log(`🔍 Checking embed URLs for ${mediaType} ${mediaId}${mediaType === 'tv' ? ` S${season}E${episode}` : ''} (preferProxy=${preferProxy})...`);
         try {
           const resp = await fetch('/api/check-embed', {
             method: 'POST',
@@ -138,7 +135,8 @@ export default function VideoPlayer({
               tmdbId: mediaId,
               season: season || 1,
               episode: episode || 1,
-              testUrls: true
+              testUrls: true,
+              preferProxy // send server our preference so it can favor proxy probes if implemented
             })
           });
 
@@ -148,33 +146,54 @@ export default function VideoPlayer({
 
             if (cancelled) return;
 
-            // If server returned a workingUrl, prefer it
-            if (data.success && data.workingUrl && data.workingUrl.url) {
-              console.log(`🎯 Server selected: ${data.workingUrl.provider} -> ${data.workingUrl.url}`);
-              setEmbedUrl(data.workingUrl.url);
-              // Build workingSources list from allUrls where direct.ok or proxy.ok
-              const all = data.allUrls || [];
-              const working = all.filter(u => (u.direct && u.direct.ok) || (u.proxy && u.proxy.ok));
-              // If server selected worked but was not included in working filter, ensure it's present
-              if (!working.find(w => w.proxied === data.workingUrl!.url)) {
-                // try to find matching entry by originalUrl or provider and add
-                const found = all.find(u => u.proxied === data.workingUrl!.url || u.originalUrl === data.workingUrl!.originalUrl || u.provider === data.workingUrl!.provider);
-                if (found) working.unshift(found);
-              }
-              setWorkingSources(working);
-              setCurrentSourceIndex(0);
+            const all = data.allUrls || [];
+
+            // Build a prioritized list of candidates depending on preferProxy
+            const prioritized = [...all];
+            if (preferProxy) {
+              // sort so usedProxy entries come first
+              prioritized.sort((a, b) => (b.usedProxy ? 1 : 0) - (a.usedProxy ? 1 : 0));
+            } else {
+              // sort so non-proxy (direct) candidates with direct.ok come first
+              prioritized.sort((a, b) => {
+                const aDirectOk = !!(a.direct && a.direct.ok);
+                const bDirectOk = !!(b.direct && b.direct.ok);
+                return (bDirectOk ? 1 : 0) - (aDirectOk ? 1 : 0);
+              });
+            }
+
+            // choose the primary candidate based on preferProxy
+            let chosen: ServerAllUrl | undefined;
+
+            if (preferProxy) {
+              // pick first candidate that used proxy and proxy.ok if available, otherwise any usedProxy entry
+              chosen = prioritized.find(u => u.usedProxy && u.proxy && u.proxy.ok) || prioritized.find(u => u.usedProxy);
+              // if none proxy-backed, fall back to direct-ok candidate
+              if (!chosen) chosen = prioritized.find(u => u.direct && u.direct.ok);
+            } else {
+              // prefer direct-ok candidates first
+              chosen = prioritized.find(u => u.direct && u.direct.ok) || prioritized.find(u => u.usedProxy && u.proxy && u.proxy.ok) || prioritized[0];
+            }
+
+            // Set embed URL according to chosen or fallback
+            if (chosen) {
+              const finalUrl = (preferProxy && chosen.usedProxy && chosen.proxied) ? chosen.proxied : (chosen.proxied || chosen.originalUrl);
+              console.log(`🎯 Selected server-provided candidate: ${chosen.provider} (usedProxy=${chosen.usedProxy}) -> ${finalUrl}`);
+              setEmbedUrl(finalUrl);
+              setWorkingSources(prioritized);
+              setCurrentSourceIndex(prioritized.indexOf(chosen));
               setLoading(false);
               return;
             }
 
-            // Else, if there are server-provided URLs, try the first proxied URL (direct preferred)
-            if (data.allUrls && data.allUrls.length > 0) {
-              const first = data.allUrls[0];
+            // If server didn't return workable candidates, but provided some URLs, try the first one
+            if (all.length > 0) {
+              const first = all[0];
               const tryUrl = first.proxied || first.originalUrl || '';
               console.log(`⚠️ No confirmed working server; trying server-provided first: ${first.provider} -> ${tryUrl}`);
+              // sort prioritized so proxy-used ones are still ordered if preferProxy
               setEmbedUrl(tryUrl);
-              // build list of all server candidates for switching
-              setWorkingSources(data.allUrls);
+              setWorkingSources(prioritized);
               setCurrentSourceIndex(0);
               setLoading(false);
               return;
@@ -231,7 +250,7 @@ export default function VideoPlayer({
         window.clearTimeout(testTimeoutRef.current);
       }
     };
-  }, [mediaId, mediaType, season, episode]);
+  }, [mediaId, mediaType, season, episode, preferProxy]);
 
   // Enhanced iframe error handling: try next workingSources entry first, then fallback to traditional sources
   const handleIframeError = async () => {
@@ -239,28 +258,30 @@ export default function VideoPlayer({
 
     // 1) If we have server-supplied workingSources, try the next one
     if (workingSources && workingSources.length > 0) {
-      const nextIndex = workingSources.findIndex((_, idx) => idx > currentSourceIndex && workingSources[idx]);
-      if (nextIndex !== -1 && workingSources[nextIndex]) {
-        const next = workingSources[nextIndex];
-        console.log(`🔄 Switching to next server-provided source: ${next.provider} -> ${next.proxied || next.originalUrl}`);
+      // try next index in prioritized list
+      for (let offset = 1; offset < workingSources.length; offset++) {
+        const nextIndex = (currentSourceIndex + offset) % workingSources.length;
+        const candidate = workingSources[nextIndex];
+        // if preferProxy, prefer candidates with usedProxy true
+        if (preferProxy) {
+          if (!candidate.usedProxy) continue; // skip non-proxy if preferring proxy
+        }
+        console.log(`🔄 Switching to server-provided candidate: ${candidate.provider} -> ${candidate.proxied || candidate.originalUrl}`);
         setCurrentSourceIndex(nextIndex);
-        setEmbedUrl(next.proxied || next.originalUrl);
+        setEmbedUrl(candidate.proxied || candidate.originalUrl);
         setError(null);
         return;
       }
 
-      // If no "later" working entry found, but there are entries earlier in the list, try them too (wrap-around)
+      // If none matched above, try any other server-provided candidate (wrap-around)
       for (let i = 0; i < workingSources.length; i++) {
         if (i === currentSourceIndex) continue;
         const cand = workingSources[i];
-        // If server indicated it's ok via direct/proxy flag prefer it
-        if ((cand.direct && cand.direct.ok) || (cand.proxy && cand.proxy.ok)) {
-          console.log(`🔁 Trying another server-provided candidate: ${cand.provider} -> ${cand.proxied || cand.originalUrl}`);
-          setCurrentSourceIndex(i);
-          setEmbedUrl(cand.proxied || cand.originalUrl);
-          setError(null);
-          return;
-        }
+        console.log(`🔁 Trying another server candidate: ${cand.provider} -> ${cand.proxied || cand.originalUrl}`);
+        setCurrentSourceIndex(i);
+        setEmbedUrl(cand.proxied || cand.originalUrl);
+        setError(null);
+        return;
       }
     }
 
