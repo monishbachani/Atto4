@@ -15,34 +15,35 @@ interface VideoPlayerProps {
   onClose?: () => void;
 }
 
-interface EmbedCheckResult {
+/**
+ * NOTE: this type models the merged route's response shape.
+ * allUrls[] entries contain:
+ * - provider
+ * - proxied (the URL the frontend should try; may be original direct URL or a proxied URL)
+ * - originalUrl
+ * - usedProxy (boolean)
+ * - direct: { ok, status, responseTime, bodySnippet } | null
+ * - proxy: { ok, status, responseTime, bodySnippet } | null
+ */
+type ServerAllUrl = {
+  provider: string;
+  type?: string;
+  originalUrl: string;
+  proxied: string | null;
+  usedProxy: boolean;
+  tested: boolean;
+  direct?: { ok?: boolean; status?: number; responseTime?: number; bodySnippet?: string; error?: string } | null;
+  proxy?: { ok?: boolean; status?: number; responseTime?: number; bodySnippet?: string; error?: string } | null;
+};
+
+type ServerResponse = {
   success: boolean;
-  workingUrl?: {
-    provider: string;
-    url: string; // proxied URL
-    originalUrl: string;
-    type: string;
-  };
-  totalTested: number;
-  workingCount: number;
-  allUrls: Array<{
-    provider: string;
-    url: string; // proxied URL
-    originalUrl: string;
-    type: string;
-    working: boolean;
-    responseTime?: number;
-    error?: string;
-  }>;
-  metadata: {
-    mediaType: string;
-    tmdbId: number;
-    season?: number;
-    episode?: number;
-    tested: boolean;
-    timestamp: string;
-  };
-}
+  workingUrl?: { provider: string; url: string; originalUrl: string; type?: string; usedProxy?: boolean } | null;
+  totalTested?: number;
+  workingCount?: number;
+  allUrls?: ServerAllUrl[];
+  metadata?: any;
+};
 
 export default function VideoPlayer({
   mediaId,
@@ -54,15 +55,15 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const [embedUrl, setEmbedUrl] = useState<string>('');
   const [sources, setSources] = useState<VideoSource[]>([]);
-  const [workingSources, setWorkingSources] = useState<any[]>([]);
+  const [workingSources, setWorkingSources] = useState<ServerAllUrl[]>([]);
   const [currentSourceIndex, setCurrentSourceIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [checkResults, setCheckResults] = useState<EmbedCheckResult | null>(null);
+  const [checkResults, setCheckResults] = useState<ServerResponse | null>(null);
 
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const testTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const testTimeoutRef = useRef<number | null>(null);
   const router = useRouter();
 
   // Client-side fallback test (simplified)
@@ -75,7 +76,7 @@ export default function VideoPlayer({
       iframe.src = url;
 
       let resolved = false;
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         if (!resolved) {
           resolved = true;
           iframe.remove();
@@ -105,7 +106,7 @@ export default function VideoPlayer({
     });
   };
 
-  // Enhanced source loading with new API
+  // Load and coordinate sources with merged route
   useEffect(() => {
     let cancelled = false;
 
@@ -114,21 +115,22 @@ export default function VideoPlayer({
       setError(null);
       setEmbedUrl('');
       setCheckResults(null);
+      setWorkingSources([]);
+      setCurrentSourceIndex(0);
 
       try {
-        // Get traditional video sources for fallback
+        // 1) Traditional video sources (fallback)
         const videoSources = mediaType === 'movie'
           ? await videoApi.getMovieSources(mediaId)
           : await videoApi.getTVSources(mediaId, season || 1, episode || 1);
 
         if (cancelled) return;
-        setSources(videoSources);
+        setSources(videoSources || []);
 
-        // Use enhanced embed checker API
+        // 2) Query the merged check-embed API
         console.log(`🔍 Checking embed URLs for ${mediaType} ${mediaId}${mediaType === 'tv' ? ` S${season}E${episode}` : ''}...`);
-        
         try {
-          const response = await fetch('/api/check-embed', {
+          const resp = await fetch('/api/check-embed', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -140,38 +142,52 @@ export default function VideoPlayer({
             })
           });
 
-          if (response.ok) {
-            const data: EmbedCheckResult = await response.json();
+          if (resp.ok) {
+            const data: ServerResponse = await resp.json();
             setCheckResults(data);
 
             if (cancelled) return;
 
-            if (data.success && data.workingUrl) {
-              console.log(`🎯 Server found working URL: ${data.workingUrl.provider} (${data.workingCount}/${data.totalTested} working)`);
-              setEmbedUrl(data.workingUrl.url); // Use proxied URL
-              setWorkingSources(data.allUrls.filter(u => u.working));
+            // If server returned a workingUrl, prefer it
+            if (data.success && data.workingUrl && data.workingUrl.url) {
+              console.log(`🎯 Server selected: ${data.workingUrl.provider} -> ${data.workingUrl.url}`);
+              setEmbedUrl(data.workingUrl.url);
+              // Build workingSources list from allUrls where direct.ok or proxy.ok
+              const all = data.allUrls || [];
+              const working = all.filter(u => (u.direct && u.direct.ok) || (u.proxy && u.proxy.ok));
+              // If server selected worked but was not included in working filter, ensure it's present
+              if (!working.find(w => w.proxied === data.workingUrl!.url)) {
+                // try to find matching entry by originalUrl or provider and add
+                const found = all.find(u => u.proxied === data.workingUrl!.url || u.originalUrl === data.workingUrl!.originalUrl || u.provider === data.workingUrl!.provider);
+                if (found) working.unshift(found);
+              }
+              setWorkingSources(working);
               setCurrentSourceIndex(0);
               setLoading(false);
               return;
-            } else if (data.allUrls && data.allUrls.length > 0) {
-              // Try first available URL even if not tested as working
-              const firstUrl = data.allUrls[0];
-              console.log(`⚠️ No confirmed working URLs, trying first available: ${firstUrl.provider}`);
-              setEmbedUrl(firstUrl.url);
+            }
+
+            // Else, if there are server-provided URLs, try the first proxied URL (direct preferred)
+            if (data.allUrls && data.allUrls.length > 0) {
+              const first = data.allUrls[0];
+              const tryUrl = first.proxied || first.originalUrl || '';
+              console.log(`⚠️ No confirmed working server; trying server-provided first: ${first.provider} -> ${tryUrl}`);
+              setEmbedUrl(tryUrl);
+              // build list of all server candidates for switching
               setWorkingSources(data.allUrls);
               setCurrentSourceIndex(0);
               setLoading(false);
               return;
             }
           } else {
-            console.log('Enhanced check failed, falling back to traditional method');
+            console.warn('check-embed returned non-OK; falling back to client-side testing');
           }
         } catch (err) {
-          console.log('Enhanced API unavailable, using traditional fallback');
+          console.warn('check-embed unavailable or failed; falling back to client-side testing', err);
         }
 
-        // Traditional fallback method
-        if (videoSources.length === 0) {
+        // 3) Traditional client-side testing fallback
+        if (!videoSources || videoSources.length === 0) {
           setError('No video sources available');
           setLoading(false);
           return;
@@ -180,39 +196,30 @@ export default function VideoPlayer({
         console.log(`🔄 Falling back to client-side testing of ${videoSources.length} sources...`);
         setIsTesting(true);
 
-        // Test sources sequentially
         for (let i = 0; i < videoSources.length; i++) {
           if (cancelled) return;
-          
-          console.log(`Testing source ${i + 1}/${videoSources.length}: ${videoSources[i].servers}`);
-          const isWorking = await testSource(videoSources[i].url);
-          
-          if (isWorking) {
-            console.log(`✓ Source ${i + 1} working: ${videoSources[i].servers}`);
+          console.log(`Testing source ${i + 1}/${videoSources.length}: ${videoSources[i].servers || videoSources[i].url}`);
+          const ok = await testSource(videoSources[i].url);
+          if (ok) {
+            console.log(`✓ Source ${i + 1} working`);
             setCurrentSourceIndex(i);
             setEmbedUrl(videoSources[i].url);
             setIsTesting(false);
             setLoading(false);
             return;
           } else {
-            console.log(`✗ Source ${i + 1} failed: ${videoSources[i].servers}`);
+            console.log(`✗ Source ${i + 1} failed`);
           }
         }
 
-        // No working sources found
         setError('All video sources failed to load');
         setIsTesting(false);
-
+        setLoading(false);
       } catch (err) {
         console.error('Failed to load video sources:', err);
-        if (!cancelled) {
-          setError('Failed to load video sources');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setIsTesting(false);
-        }
+        if (!cancelled) setError('Failed to load video sources');
+        setLoading(false);
+        setIsTesting(false);
       }
     };
 
@@ -221,58 +228,69 @@ export default function VideoPlayer({
     return () => {
       cancelled = true;
       if (testTimeoutRef.current) {
-        clearTimeout(testTimeoutRef.current);
+        window.clearTimeout(testTimeoutRef.current);
       }
     };
   }, [mediaId, mediaType, season, episode]);
 
-  // Enhanced iframe error handling
+  // Enhanced iframe error handling: try next workingSources entry first, then fallback to traditional sources
   const handleIframeError = async () => {
-    console.warn(`Iframe error on current source`);
-    
-    // Try next working source from enhanced check results
-    if (workingSources.length > 0) {
-      const nextWorkingIndex = workingSources.findIndex((s, idx) => 
-        idx > currentSourceIndex && s.working
-      );
-      
-      if (nextWorkingIndex !== -1) {
-        const nextSource = workingSources[nextWorkingIndex];
-        console.log(`🔄 Switching to next working source: ${nextSource.provider}`);
-        setCurrentSourceIndex(nextWorkingIndex);
-        setEmbedUrl(nextSource.url);
+    console.warn('Iframe reported an error; attempting auto-switch...');
+
+    // 1) If we have server-supplied workingSources, try the next one
+    if (workingSources && workingSources.length > 0) {
+      const nextIndex = workingSources.findIndex((_, idx) => idx > currentSourceIndex && workingSources[idx]);
+      if (nextIndex !== -1 && workingSources[nextIndex]) {
+        const next = workingSources[nextIndex];
+        console.log(`🔄 Switching to next server-provided source: ${next.provider} -> ${next.proxied || next.originalUrl}`);
+        setCurrentSourceIndex(nextIndex);
+        setEmbedUrl(next.proxied || next.originalUrl);
         setError(null);
         return;
       }
+
+      // If no "later" working entry found, but there are entries earlier in the list, try them too (wrap-around)
+      for (let i = 0; i < workingSources.length; i++) {
+        if (i === currentSourceIndex) continue;
+        const cand = workingSources[i];
+        // If server indicated it's ok via direct/proxy flag prefer it
+        if ((cand.direct && cand.direct.ok) || (cand.proxy && cand.proxy.ok)) {
+          console.log(`🔁 Trying another server-provided candidate: ${cand.provider} -> ${cand.proxied || cand.originalUrl}`);
+          setCurrentSourceIndex(i);
+          setEmbedUrl(cand.proxied || cand.originalUrl);
+          setError(null);
+          return;
+        }
+      }
     }
 
-    // Fallback to traditional source switching
-    const remainingSources = sources.slice(currentSourceIndex + 1);
-    if (remainingSources.length === 0) {
-      setError('All video sources failed to load');
-      return;
-    }
-
-    for (let i = 0; i < remainingSources.length; i++) {
-      const absoluteIndex = currentSourceIndex + 1 + i;
-      const isWorking = await testSource(remainingSources[i].url, 4000);
-      if (isWorking) {
-        console.log(`🔄 Emergency fallback to source ${absoluteIndex + 1}: ${sources[absoluteIndex].servers}`);
+    // 2) Fallback to traditional sources list (client-side test them sequentially)
+    const startIndex = Math.max(0, currentSourceIndex + 1);
+    const remaining = sources.slice(startIndex);
+    for (let i = 0; i < remaining.length; i++) {
+      const absoluteIndex = startIndex + i;
+      console.log(`Emergency testing fallback source ${absoluteIndex}: ${remaining[i].url}`);
+      const ok = await testSource(remaining[i].url, 4000);
+      if (ok) {
+        console.log(`🔄 Fallback succeeded: ${remaining[i].servers || remaining[i].url}`);
         setCurrentSourceIndex(absoluteIndex);
-        setEmbedUrl(sources[absoluteIndex].url);
+        setEmbedUrl(remaining[i].url);
         setError(null);
         return;
       }
     }
-    
+
+    // 3) If still nothing, final error
     setError('All video sources failed to load');
   };
 
   // Handle successful load
   const handleIframeLoad = () => {
-    const currentSource = workingSources.length > 0 ? workingSources[currentSourceIndex] : sources[currentSourceIndex];
-    const sourceName = currentSource?.provider || currentSource?.servers || 'Unknown';
-    console.log(`✓ Successfully loaded: ${sourceName}`);
+    const current = (workingSources && workingSources.length > 0)
+      ? workingSources[currentSourceIndex]
+      : sources[currentSourceIndex];
+    const name = current?.provider || (current as any)?.servers || 'Unknown';
+    console.log(`✓ Successfully loaded: ${name}`);
     setError(null);
   };
 
@@ -282,29 +300,27 @@ export default function VideoPlayer({
     else router.back();
   };
 
-  // Handle ESC key
+  // ESC to close
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleClose();
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [handleClose]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black">
-      {/* Enhanced Loading State */}
+      {/* Loading */}
       {(loading || isTesting) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-white text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mb-6 mx-auto"></div>
-            <p className="text-xl mb-2">
-              {isTesting ? 'Testing video sources...' : 'Loading video sources...'}
-            </p>
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-white border-t-transparent mb-6 mx-auto" />
+            <p className="text-xl mb-2">{isTesting ? 'Testing video sources...' : 'Loading video sources...'}</p>
             <p className="text-sm text-gray-400">Finding the best server for you</p>
             {checkResults && (
               <p className="text-xs text-gray-500 mt-2">
-                {checkResults.workingCount}/{checkResults.totalTested} servers available
+                {checkResults.workingCount ?? 0}/{checkResults.totalTested ?? 0} servers available
               </p>
             )}
             {sources.length > 0 && !checkResults && (
@@ -314,24 +330,25 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Enhanced Error State */}
+      {/* Error */}
       {error && !loading && !isTesting && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-white text-center max-w-md px-6">
             <div className="text-6xl mb-6">⚠️</div>
             <h2 className="text-2xl font-bold mb-4">Unable to Play Video</h2>
             <p className="text-gray-300 mb-4">{error}</p>
+
             {checkResults && (
               <div className="text-sm text-gray-400 mb-6">
-                <p>Tested {checkResults.totalTested} different servers</p>
-                {checkResults.workingCount > 0 && (
-                  <p>{checkResults.workingCount} servers were available but failed to load</p>
-                )}
+                <p>Tested {checkResults.totalTested ?? 0} different servers</p>
+                {checkResults.workingCount ? <p>{checkResults.workingCount} servers were available but failed to load</p> : null}
               </div>
             )}
+
             {!checkResults && sources.length > 0 && (
               <p className="text-sm text-gray-400 mb-6">Tested {sources.length} fallback servers</p>
             )}
+
             <button
               onClick={handleClose}
               className="px-8 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
@@ -342,7 +359,7 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Video Player */}
+      {/* Player */}
       {embedUrl && !loading && !error && !isTesting && (
         <>
           <iframe
@@ -354,6 +371,7 @@ export default function VideoPlayer({
             onError={handleIframeError}
             onLoad={handleIframeLoad}
             style={{ border: 'none' }}
+            title={title || `player-${mediaType}-${mediaId}`}
           />
 
           {/* Top-left Back + Title */}
@@ -372,17 +390,33 @@ export default function VideoPlayer({
             )}
           </div>
 
-          {/* Enhanced Controls Overlay */}
+          {/* Controls overlay */}
           <div className="absolute top-4 right-4 text-white/70 text-sm pointer-events-none">
             <div>Auto-switch enabled — Press ESC to exit</div>
-            {checkResults && workingSources.length > 1 && (
-              <div className="text-xs mt-1">
-                {workingSources.length} backup servers available
-              </div>
+            {workingSources && workingSources.length > 1 && (
+              <div className="text-xs mt-1">{workingSources.length} backup servers available</div>
             )}
           </div>
         </>
       )}
+
+      {/* Nothing available */}
+      {!embedUrl && !loading && !error && !isTesting && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="text-4xl mb-4">📺</div>
+            <h2 className="text-xl font-bold mb-2">No Video Sources Available</h2>
+            <p className="text-gray-400 mb-6">Unable to find any playable video sources for this content</p>
+            <button
+              onClick={handleClose}
+              className="px-8 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
