@@ -1,13 +1,16 @@
-// app/api/check-embed/route.ts
+// merged route handler - place in app/api/proxy/route.ts and/or app/api/check-embed/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * check-embed route (improved):
- * - prefers direct embed URLs for iframe src
- * - falls back to proxy only when direct fetch fails and host is allowed
- * - returns detailed diagnostics for both direct and proxy attempts
+ * Merged proxy + check-embed route
+ *
+ * - Handles /api/proxy?target=... (GET) as a conservative proxy with timeout/retry and HTML rewriting.
+ * - Handles /api/check-embed (GET & POST) as the embed candidate generator and tester.
+ *
+ * To use: replace the contents of your proxy and check-embed route files with this same file.
  */
 
+/* ---------- Config ---------- */
 const ALLOWED_HOSTS = [
   "vidlink.pro",
   "vidsrc.to",
@@ -17,6 +20,8 @@ const ALLOWED_HOSTS = [
   "doodstream.com",
   "streamtape.com",
   "111movies.com",
+  "player.111movies.com",
+  "embed.111movies.com",
 ];
 
 function getHostname(u: string | null) {
@@ -28,13 +33,164 @@ function getHostname(u: string | null) {
   }
 }
 
-function hostAllowed(u: string | null) {
-  const host = getHostname(u);
+function hostAllowedHost(host: string | null) {
   if (!host) return false;
   return ALLOWED_HOSTS.some(h => host === h || host.endsWith(`.${h}`));
 }
 
-// Build candidate list (original + proxyCandidate)
+function hostAllowedUrl(u: string | null) {
+  const host = getHostname(u);
+  return hostAllowedHost(host);
+}
+
+/* ---------- Utilities ---------- */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchWithTimeoutAndRetry(url: string, timeoutMs = 10000, retries = 2) {
+  const parsed = new URL(url);
+  const origin = parsed.origin;
+
+  const baseHeaders: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (compatible; Atto4Proxy/1.0)",
+    Accept: "*/*",
+    Referer: origin,
+    Origin: origin,
+  };
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const resp = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        headers: baseHeaders,
+        credentials: "omit",
+      });
+      clearTimeout(id);
+      return resp;
+    } catch (err: any) {
+      clearTimeout(id);
+      const msg = err?.message || String(err);
+      const transient = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|network|timeout|aborted|Failed to fetch/i.test(msg) || err?.code === "ECONNRESET" || err?.code === "ETIMEDOUT";
+      if (attempt === retries || !transient) {
+        const e = new Error(`fetch failed (attempt ${attempt + 1}): ${msg}`);
+        (e as any).cause = err;
+        throw e;
+      }
+      const backoff = 300 * (2 ** attempt);
+      console.warn(`Transient fetch error for ${url} (attempt ${attempt + 1}/${retries}). Retrying ${backoff}ms.`, msg);
+      await sleep(backoff);
+    }
+  }
+
+  throw new Error("unreachable fetchWithTimeoutAndRetry");
+}
+
+function rewriteAbsoluteUrlsToProxy(htmlText: string) {
+  const replaced = htmlText.replace(/(src|href)=("https?:\/\/[^"]+"|'https?:\/\/[^']+')/gi, (m, attr, quotedUrl) => {
+    const url = quotedUrl.slice(1, -1);
+    const host = getHostname(url);
+    if (!host) return `${attr}=${quotedUrl}`;
+    if (hostAllowedHost(host)) {
+      return `${attr}="/api/proxy?target=${encodeURIComponent(url)}"`;
+    }
+    return `${attr}=${quotedUrl}`;
+  });
+
+  const finalText = replaced.replace(/(['"`])(https?:\/\/[^'"` ]+)['"`]/gi, (m, quote, candidate) => {
+    try {
+      const host = getHostname(candidate);
+      if (host && hostAllowedHost(host)) {
+        return `${quote}/api/proxy?target=${encodeURIComponent(candidate)}${quote}`;
+      }
+    } catch { /* ignore */ }
+    return m;
+  });
+
+  return finalText;
+}
+
+/* ---------- Proxy handler (used by /api/proxy) ---------- */
+async function handleProxyGET(request: NextRequest) {
+  try {
+    const target = request.nextUrl.searchParams.get("target");
+    if (!target) {
+      return NextResponse.json({ success: false, error: "Missing target query param" }, { status: 400 });
+    }
+
+    const hostname = getHostname(target);
+    if (!hostname) {
+      return NextResponse.json({ success: false, error: "Invalid target URL" }, { status: 400 });
+    }
+
+    if (!hostAllowedHost(hostname)) {
+      return NextResponse.json({ success: false, error: "Host not allowed", host: hostname }, { status: 403 });
+    }
+
+    let resp;
+    try {
+      resp = await fetchWithTimeoutAndRetry(target, 10000, 2);
+    } catch (err: any) {
+      console.error("Proxy fetch failed:", err?.message || err);
+      return NextResponse.json({ success: false, error: "Failed to fetch target", details: err?.message || String(err) }, { status: 502 });
+    }
+
+    if (!resp) {
+      return NextResponse.json({ success: false, error: "No response from target" }, { status: 502 });
+    }
+
+    const contentType = resp.headers.get("content-type") || "";
+
+    if (!resp.ok) {
+      let snippet = "";
+      try { const txt = await resp.text(); snippet = typeof txt === "string" ? txt.slice(0, 2000) : ""; } catch (e) { snippet = "(failed to read body)"; }
+      return NextResponse.json({
+        success: false,
+        status: resp.status,
+        statusText: resp.statusText,
+        message: `Upstream returned ${resp.status} ${resp.statusText}`,
+        bodySnippet: snippet
+      }, { status: 502 });
+    }
+
+    if (contentType.includes("text/html")) {
+      const text = await resp.text();
+      const rewritten = rewriteAbsoluteUrlsToProxy(text);
+      return new NextResponse(rewritten, {
+        status: resp.status,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "x-proxy-by": "Atto4-Proxy",
+        },
+      });
+    }
+
+    const arrayBuffer = await resp.arrayBuffer();
+    const forwardedHeaders: Record<string, string> = {};
+    resp.headers.forEach((v, k) => {
+      const low = k.toLowerCase();
+      if (["content-security-policy", "x-frame-options", "set-cookie", "transfer-encoding", "connection"].includes(low)) return;
+      forwardedHeaders[k] = v;
+    });
+
+    if (!forwardedHeaders["content-type"]) forwardedHeaders["content-type"] = contentType || "application/octet-stream";
+    forwardedHeaders["x-proxy-by"] = "Atto4-Proxy";
+
+    return new NextResponse(Buffer.from(arrayBuffer), {
+      status: resp.status,
+      headers: forwardedHeaders,
+    });
+
+  } catch (err) {
+    console.error("Proxy error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ success: false, error: "Internal proxy error", details: message }, { status: 500 });
+  }
+}
+
+/* ---------- Check-embed utilities & handler (used by /api/check-embed) ---------- */
 function buildAllEmbedCandidates(mediaType: "movie" | "tv", tmdbId: number, season?: number, episode?: number) {
   const make = (provider: string, url: string, type: string) => ({
     provider,
@@ -55,7 +211,6 @@ function buildAllEmbedCandidates(mediaType: "movie" | "tv", tmdbId: number, seas
     candidates.push(make("2Embed", `https://2embed.cc/embed/tv?tmdb=${tmdbId}&season=${season}&episode=${episode}`, "tv"));
   }
 
-  // fallbacks
   if (mediaType === "movie" && season && episode) {
     candidates.push(make("VidLink-Fallback", `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?primaryColor=3a86ff&autoplay=true&nextbutton=true`, "tv-fallback"));
   } else if (mediaType === "tv") {
@@ -65,13 +220,6 @@ function buildAllEmbedCandidates(mediaType: "movie" | "tv", tmdbId: number, seas
   return candidates;
 }
 
-/** Helper sleep for backoff */
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Lightweight fetch test: GET with timeout, single attempt (caller may retry).
- * Returns structured result with status/snippet for diagnostics.
- */
 async function fetchTest(url: string, timeoutMs = 5000): Promise<{
   ok: boolean;
   status?: number;
@@ -84,31 +232,20 @@ async function fetchTest(url: string, timeoutMs = 5000): Promise<{
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
 
-  // defensive headers
   const headers: Record<string, string> = {
     "User-Agent": "Mozilla/5.0 (compatible; Atto4EmbedChecker/1.0)",
     Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    Referer: new URL(url).origin
   };
 
   try {
     const res = await fetch(url, { method: "GET", signal: controller.signal, headers, credentials: "omit" });
     clearTimeout(id);
     const responseTime = Date.now() - start;
-
-    // If not ok, try to read a snippet for diagnostics
     if (!res.ok) {
       let snippet = "";
-      try {
-        const text = await res.text();
-        snippet = typeof text === "string" ? text.slice(0, 2000) : "";
-      } catch (e) {
-        snippet = "(failed to read body)";
-      }
+      try { const t = await res.text(); snippet = typeof t === "string" ? t.slice(0, 2000) : ""; } catch (e) { snippet = "(failed to read body)"; }
       return { ok: false, status: res.status, statusText: res.statusText, responseTime, bodySnippet: snippet, error: `HTTP ${res.status}` };
     }
-
-    // ok
     return { ok: true, status: res.status, statusText: res.statusText, responseTime };
   } catch (err: any) {
     clearTimeout(id);
@@ -117,13 +254,7 @@ async function fetchTest(url: string, timeoutMs = 5000): Promise<{
   }
 }
 
-/**
- * Primary route: POST and GET handlers
- * - POST: accepts JSON body
- * - GET: query params (kept for compatibility)
- */
-
-export async function POST(req: NextRequest) {
+async function handleCheckEmbedPOST(req: NextRequest) {
   try {
     const text = await req.text();
     if (!text || !text.trim()) {
@@ -156,24 +287,21 @@ export async function POST(req: NextRequest) {
       console.log(`🔍 Testing ${candidates.length} embed URLs for ${mediaType} ${tmdbId}${mediaType === "tv" ? ` S${season}E${episode}` : ''}...`);
 
       for (const candidate of candidates) {
-        // Attempt 1: direct original URL
         const directResult = await fetchTest(candidate.originalUrl, 5000);
 
         let proxyResult = undefined;
         let chosenProxiedAbsolute = null;
         let chosenUsedProxy = false;
 
-        // If direct worked, prefer it
         if (directResult.ok) {
           chosenProxiedAbsolute = candidate.originalUrl;
           chosenUsedProxy = false;
           console.log(`  ✅ ${candidate.provider} (direct) ${directResult.responseTime}ms`);
         } else {
-          // If direct failed and host allowed for proxy, try proxy
-          if (hostAllowed(candidate.originalUrl)) {
-            // resolve proxy path to absolute URL based on incoming request origin
-            const proxyPath = candidate.proxyCandidate; // e.g. /api/proxy?target=...
+          if (hostAllowedUrl(candidate.originalUrl)) {
+            const proxyPath = candidate.proxyCandidate;
             const proxyAbsolute = proxyPath.startsWith("http") ? proxyPath : new URL(proxyPath, req.url).href;
+            // try proxy by calling our own proxy endpoint (which this same file implements)
             proxyResult = await fetchTest(proxyAbsolute, 7000);
 
             if (proxyResult.ok) {
@@ -181,7 +309,7 @@ export async function POST(req: NextRequest) {
               chosenUsedProxy = true;
               console.log(`  ✅ ${candidate.provider} (proxy) ${proxyResult.responseTime}ms`);
             } else {
-              chosenProxiedAbsolute = proxyAbsolute; // still helpful to show what we tried
+              chosenProxiedAbsolute = proxyAbsolute;
               console.log(`  ❌ ${candidate.provider} proxy failed: ${proxyResult.error || proxyResult.status || 'unknown'}`);
             }
           } else {
@@ -196,7 +324,6 @@ export async function POST(req: NextRequest) {
           proxyCandidate: candidate.proxyCandidate,
           directResult,
           proxyResult,
-          // The URL the frontend should use for iframe src (prefer direct, fallback to proxy if it worked)
           proxied: chosenProxiedAbsolute,
           usedProxy: chosenUsedProxy,
           tested: true,
@@ -213,11 +340,9 @@ export async function POST(req: NextRequest) {
             usedProxy: result.usedProxy,
           };
           console.log(`🎯 Selected primary source: ${candidate.provider} -> ${result.proxied}`);
-          // continue testing for diagnostics, do not break
         }
       }
     } else {
-      // no test requested: prefer direct URLs for iframe
       for (const c of candidates) {
         allResults.push({
           provider: c.provider,
@@ -265,7 +390,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET(req: NextRequest) {
+async function handleCheckEmbedGET(req: NextRequest) {
   try {
     const urlObj = new URL(req.url);
     const mediaType = urlObj.searchParams.get("mediaType");
@@ -289,7 +414,6 @@ export async function GET(req: NextRequest) {
     let primary: any = null;
 
     if (testUrls) {
-      // test only first few for GET speed (like before)
       for (let i = 0; i < Math.min(3, candidates.length); i++) {
         const c = candidates[i];
         const directResult = await fetchTest(c.originalUrl, 3000);
@@ -300,7 +424,7 @@ export async function GET(req: NextRequest) {
         if (directResult.ok) {
           chosen = c.originalUrl;
           usedProxy = false;
-        } else if (hostAllowed(c.originalUrl)) {
+        } else if (hostAllowedUrl(c.originalUrl)) {
           const proxyAbs = c.proxyCandidate.startsWith("http") ? c.proxyCandidate : new URL(c.proxyCandidate, req.url).href;
           proxyResult = await fetchTest(proxyAbs, 4000);
           if (proxyResult.ok) {
@@ -344,4 +468,52 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: "Internal server error", details: err instanceof Error ? err.message : String(err) }, { status: 500 });
   }
 }
+
+/* ---------- Route dispatchers: export GET/POST that inspect pathname ---------- */
+
+export async function GET(request: NextRequest) {
+  const pathname = request.nextUrl.pathname || "";
+  // path may be /api/proxy or /api/check-embed depending on where file lives
+  if (pathname.endsWith("/api/proxy") || pathname.endsWith("/proxy")) {
+    return handleProxyGET(request);
+  }
+  if (pathname.endsWith("/api/check-embed") || pathname.endsWith("/check-embed")) {
+    return handleCheckEmbedGET(request);
+  }
+
+  // fallback: if client invoked /api/proxy?target=..., proxy
+  if (request.nextUrl.searchParams.get("target")) {
+    return handleProxyGET(request);
+  }
+
+  // default: check-embed GET
+  return handleCheckEmbedGET(request);
+}
+
+export async function POST(request: NextRequest) {
+  const pathname = request.nextUrl.pathname || "";
+  if (pathname.endsWith("/api/proxy") || pathname.endsWith("/proxy")) {
+    // proxy via POST (accept JSON { target })
+    try {
+      const body = await request.json().catch(() => null);
+      const target = body?.target || request.nextUrl.searchParams.get("target");
+      if (!target) return NextResponse.json({ success: false, error: "Missing target" }, { status: 400 });
+      // delegate to fetchWithTimeoutAndRetry and response streaming logic used in GET
+      const fakeReq = request;
+      const proxyUrl = new URL(request.url);
+      proxyUrl.searchParams.set("target", target);
+      return handleProxyGET(new NextRequest(proxyUrl)); // Note: NextRequest constructor usage above is conceptual; in runtime this may differ.
+    } catch (err) {
+      return NextResponse.json({ success: false, error: "Proxy POST failed", details: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    }
+  }
+
+  if (pathname.endsWith("/api/check-embed") || pathname.endsWith("/check-embed")) {
+    return handleCheckEmbedPOST(request);
+  }
+
+  // default: treat POST as check-embed
+  return handleCheckEmbedPOST(request);
+}
+
 
