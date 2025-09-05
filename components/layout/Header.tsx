@@ -51,7 +51,7 @@ export default function Header() {
                 </div>
               </div>
               {/* FIXED: Only logo text uses Chillax */}
-              <span className="font-chillax text-xl sm:text-2xl font-bold text-white uppercase transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
+              <span className="font-chillax text-xl sm:text-2xl font-bold text-white transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
                 Atto4
               </span>
             </Link>
@@ -72,7 +72,7 @@ export default function Header() {
                       }`}>
                         <Icon className="w-4 h-4" />
                         {/* FIXED: Only nav text uses Chillax */}
-                        <span className="font-chillax uppercase text-sm font-semibold">{item.label}</span>
+                        <span className="font-chillax text-sm font-semibold">{item.label}</span>
                       </div>
                     </Link>
                   </div>
