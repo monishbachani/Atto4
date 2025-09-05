@@ -164,7 +164,7 @@ export default function Header() {
           {/* Glass Mobile Menu */}
           <div
             className="fixed top-16 right-0 bottom-0 z-40 w-80 max-w-[85vw] glass-strong border-l border-white/10 md:hidden"
-            style={{ animation: 'slideInRight 0.3s ease-out forwards' }}
+            style={{ animation: 'ToptoBottom 0.3s ease-out forwards' }}
           >
             <div className="p-6 space-y-6">
               <nav className="space-y-1">
@@ -204,7 +204,7 @@ export default function Header() {
                   className="glass-card flex items-center space-x-3 w-full px-4 py-3 rounded-xl font-medium text-white hover:text-blue-300 transition-all duration-200"
                   style={{
                     animationDelay: '0.4s',
-                    animation: 'slideInRight 0.3s ease-out forwards'
+                    animation: 'ToptoBottom 0.3s ease-out forwards'
                   }}
                 >
                   <User className="w-5 h-5" />
