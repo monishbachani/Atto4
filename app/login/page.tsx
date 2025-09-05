@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Eye, EyeOff, Mail, Lock, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
@@ -54,19 +55,29 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-5"></div>
       
       <div className="relative w-full max-w-md">
-        {/* Logo Section */}
+        {/* Logo Section - UPDATED WITH ATTO4 BRANDING */}
         <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center space-x-2 group">
-            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
-              <span className="text-white font-bold text-xl">B</span>
+          <Link href="/" className="inline-flex items-center space-x-3 group">
+            <div className="glass-card relative w-12 h-12 rounded-xl overflow-hidden p-1 group-hover:scale-105 transition-transform duration-300">
+              <div className="w-full h-full rounded-lg overflow-hidden">
+                <Image
+                  src="/logo.png"
+                  alt="Atto4 Logo"
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              </div>
             </div>
-            <span className="text-2xl font-bold text-white">Bradflix</span>
+            <span className="font-chillax text-2xl font-bold text-white uppercase tracking-wide">
+              Atto4
+            </span>
           </Link>
           <p className="text-gray-400 mt-2">Welcome back to your streaming world</p>
         </div>
 
         {/* Login Form */}
-        <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-8 shadow-2xl">
+        <div className="glass-strong rounded-2xl p-8 shadow-2xl">
           <h1 className="text-2xl font-bold text-white mb-6 text-center">
             Sign in to your account
           </h1>
@@ -96,7 +107,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
-                  className="w-full pl-10 pr-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:opacity-50"
+                  className="w-full pl-10 pr-4 py-3 glass-card rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:opacity-50 border-0"
                   placeholder="Enter your email"
                 />
               </div>
@@ -119,7 +130,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
-                  className="w-full pl-10 pr-12 py-3 bg-gray-800/50 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:opacity-50"
+                  className="w-full pl-10 pr-12 py-3 glass-card rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:opacity-50 border-0"
                   placeholder="Enter your password"
                 />
                 <button
@@ -141,7 +152,7 @@ export default function LoginPage() {
               <label className="flex items-center">
                 <input
                   type="checkbox"
-                  className="rounded border-gray-700 text-blue-600 focus:ring-blue-500 bg-gray-800"
+                  className="rounded border-gray-600 text-blue-600 focus:ring-blue-500 bg-gray-700/50 focus:ring-offset-0"
                 />
                 <span className="ml-2 text-sm text-gray-400">Remember me</span>
               </label>
@@ -157,7 +168,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2 shadow-lg"
             >
               {loading ? (
                 <>
@@ -198,4 +209,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
 
