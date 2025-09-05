@@ -34,13 +34,7 @@ export default function LoginPage() {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000));
       
-      // TODO: Replace with your actual authentication logic
-      // Example: await signIn('credentials', { email, password })
-      
       console.log('Login attempt:', { email, password });
-      
-      // Redirect on success (replace with your routing logic)
-      // router.push('/');
       
     } catch (err) {
       setError('Invalid email or password. Please try again.');
@@ -55,7 +49,7 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-[url('/grid-pattern.svg')] opacity-5"></div>
       
       <div className="relative w-full max-w-md">
-        {/* Logo Section - UPDATED WITH ATTO4 BRANDING */}
+        {/* Logo Section - UPDATED WITH ATTO4 BRANDING (NO UPPERCASE) */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center space-x-3 group">
             <div className="glass-card relative w-12 h-12 rounded-xl overflow-hidden p-1 group-hover:scale-105 transition-transform duration-300">
@@ -69,14 +63,15 @@ export default function LoginPage() {
                 />
               </div>
             </div>
-            <span className="font-chillax text-2xl font-bold text-white uppercase tracking-wide">
+            {/* FIXED: Removed uppercase - displays as "Atto4" not "ATTO4" */}
+            <span className="font-chillax text-2xl font-bold text-white tracking-wide">
               Atto4
             </span>
           </Link>
           <p className="text-gray-400 mt-2">Welcome back to your streaming world</p>
         </div>
 
-        {/* Login Form */}
+        {/* Rest of login form remains the same */}
         <div className="glass-strong rounded-2xl p-8 shadow-2xl">
           <h1 className="text-2xl font-bold text-white mb-6 text-center">
             Sign in to your account
@@ -209,4 +204,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
