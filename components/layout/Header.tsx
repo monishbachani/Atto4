@@ -50,7 +50,7 @@ export default function Header() {
                   <Image src="/logo.png" alt="Atto4 Logo" fill className="object-cover" priority />
                 </div>
               </div>
-              {/* FIXED: Only logo text uses Chillax */}
+              {/* FIXED: Removed uppercase - displays as "Atto4" not "ATTO4" */}
               <span className="font-chillax text-xl sm:text-2xl font-bold text-white transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
                 Atto4
               </span>
@@ -71,8 +71,8 @@ export default function Header() {
                           : 'text-white hover:text-blue-300'
                       }`}>
                         <Icon className="w-4 h-4" />
-                        {/* FIXED: Only nav text uses Chillax */}
-                        <span className="font-chillax text-sm font-semibold">{item.label}</span>
+                        {/* Navigation items keep uppercase */}
+                        <span className="font-chillax uppercase text-sm font-semibold">{item.label}</span>
                       </div>
                     </Link>
                   </div>
@@ -169,7 +169,7 @@ export default function Header() {
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       <Icon className="w-4 h-4" />
-                      {/* FIXED: Only mobile nav text uses Chillax */}
+                      {/* Mobile nav items keep uppercase */}
                       <span className="font-chillax uppercase text-xs font-semibold tracking-wide">
                         {item.label}
                       </span>
@@ -186,7 +186,7 @@ export default function Header() {
                   className="mobile-menu-item glass-card flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-white hover:text-blue-300 hover:bg-white/5 transition-all duration-200 w-full"
                 >
                   <User className="w-4 h-4" />
-                  {/* FIXED: Only mobile login text uses Chillax */}
+                  {/* Mobile login keeps uppercase */}
                   <span className="font-chillax uppercase text-xs font-semibold tracking-wide">
                     Login
                   </span>
