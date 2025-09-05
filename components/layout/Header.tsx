@@ -23,17 +23,14 @@ export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Handle scroll effect for glass UI
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
-    
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close menus on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
     setIsSearchOpen(false);
@@ -46,25 +43,20 @@ export default function Header() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
-            {/* Logo Section */}
+            {/* Logo Section - CHILLAX FONT */}
             <Link href="/" className="flex items-center space-x-3 group">
               <div className="glass-card relative w-10 h-10 sm:w-11 sm:h-11 rounded-xl overflow-hidden p-1 transform transition-all duration-300 hover:scale-110 hover:rotate-2">
                 <div className="w-full h-full rounded-lg overflow-hidden">
-                  <Image
-                    src="/logo.png"
-                    alt="Atto4 Logo"
-                    fill
-                    className="object-cover"
-                    priority
-                  />
+                  <Image src="/logo.png" alt="Atto4 Logo" fill className="object-cover" priority />
                 </div>
               </div>
+              {/* FIXED: Only logo text uses Chillax */}
               <span className="font-chillax text-xl sm:text-2xl font-bold text-white uppercase transition-all duration-300 transform hover:scale-105 drop-shadow-lg">
                 Atto4
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
+            {/* Desktop Navigation - CHILLAX FONT */}
             <nav className="hidden md:flex items-center space-x-2">
               {navigationItems.map((item) => {
                 const Icon = item.icon;
@@ -79,7 +71,8 @@ export default function Header() {
                           : 'text-white hover:text-blue-300'
                       }`}>
                         <Icon className="w-4 h-4" />
-                        <span className="uppercase text-sm font-semibold">{item.label}</span>
+                        {/* FIXED: Only nav text uses Chillax */}
+                        <span className="font-chillax uppercase text-sm font-semibold">{item.label}</span>
                       </div>
                     </Link>
                   </div>
@@ -89,21 +82,17 @@ export default function Header() {
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-2">
-              {/* Search Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSearchOpen(!isSearchOpen)}
                 className={`glass-button rounded-xl ${
-                  isSearchOpen 
-                    ? 'glass-glow text-blue-400 bg-blue-500/20' 
-                    : 'text-white hover:text-blue-300'
+                  isSearchOpen ? 'glass-glow text-blue-400 bg-blue-500/20' : 'text-white hover:text-blue-300'
                 }`}
               >
                 <Search className="h-5 w-5" />
               </Button>
 
-              {/* User Button */}
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -113,22 +102,15 @@ export default function Header() {
                 <User className="h-5 w-5" />
               </Button>
 
-              {/* Mobile Menu Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 className={`glass-button md:hidden rounded-xl transition-all duration-300 ${
-                  isMobileMenuOpen 
-                    ? 'rotate-90 text-blue-400' 
-                    : 'text-white hover:text-blue-300'
+                  isMobileMenuOpen ? 'rotate-90 text-blue-400' : 'text-white hover:text-blue-300'
                 }`}
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               >
-                {isMobileMenuOpen ? (
-                  <X className="h-5 w-5" />
-                ) : (
-                  <Menu className="h-5 w-5" />
-                )}
+                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </Button>
             </div>
           </div>
@@ -136,14 +118,9 @@ export default function Header() {
       </header>
 
       {/* Search Overlay */}
-      <div
-        className={`fixed top-16 left-0 right-0 z-40 transition-all duration-300 ${
-          isSearchOpen 
-            ? 'opacity-100 translate-y-0 pointer-events-auto' 
-            : 'opacity-0 -translate-y-4 pointer-events-none'
-        }`}
-        style={{ animation: isSearchOpen ? 'fadeIn 0.3s ease-out' : '' }}
-      >
+      <div className={`fixed top-16 left-0 right-0 z-40 transition-all duration-300 ${
+        isSearchOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'
+      }`}>
         <div className="glass-strong">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <SearchBar onClose={() => setIsSearchOpen(false)} />
@@ -151,32 +128,31 @@ export default function Header() {
         </div>
       </div>
 
-      {/* TOP DROPDOWN MOBILE MENU - Replaces Right Sidebar */}
+      {/* MINIMALISTIC TOP DROPDOWN MENU */}
       {isMobileMenuOpen && (
         <>
-          {/* Backdrop */}
+          {/* Subtle Backdrop */}
           <div
-            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm md:hidden"
+            className="mobile-backdrop-minimal md:hidden"
             onClick={() => setIsMobileMenuOpen(false)}
-            style={{ animation: 'fadeIn 0.3s ease-out forwards' }}
           />
           
-          {/* Top Dropdown Menu */}
-          <div className="mobile-top-menu fixed top-16 left-0 right-0 z-40 glass-strong border-b border-white/10 shadow-2xl md:hidden">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Compact Top Menu */}
+          <div className="mobile-top-menu fixed top-16 left-4 right-4 z-40 glass-strong rounded-2xl shadow-2xl md:hidden">
+            <div className="p-4">
               
-              {/* Close Button */}
-              <div className="flex justify-end mb-6">
+              {/* Minimal Close Button */}
+              <div className="flex justify-end mb-3">
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="glass-card p-2 rounded-lg text-white hover:text-blue-300 transition-colors"
+                  className="close-btn-minimal"
                 >
-                  <X className="w-6 h-6" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Navigation Grid */}
-              <div className="grid grid-cols-1 gap-4">
+              {/* Compact Navigation - CHILLAX FONT */}
+              <div className="space-y-2">
                 {navigationItems.map((item, index) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href;
@@ -185,52 +161,36 @@ export default function Header() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`mobile-menu-item glass-card flex items-center space-x-4 p-4 rounded-xl font-medium transition-all duration-200 ${
+                      className={`mobile-menu-item glass-card flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         isActive 
-                          ? 'glass-glow text-blue-400 bg-blue-500/20 border border-blue-400/30' 
+                          ? 'text-blue-400 bg-blue-500/20 border border-blue-400/30' 
                           : 'text-white hover:text-blue-300 hover:bg-white/5'
                       }`}
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
-                      <Icon className="w-6 h-6" />
-                      <span className="uppercase text-lg font-semibold tracking-wide">
+                      <Icon className="w-4 h-4" />
+                      {/* FIXED: Only mobile nav text uses Chillax */}
+                      <span className="font-chillax uppercase text-xs font-semibold tracking-wide">
                         {item.label}
                       </span>
                     </Link>
                   );
                 })}
 
-                {/* Login Button */}
+                {/* Compact Login - CHILLAX FONT */}
                 <button
                   onClick={() => {
                     router.push('/login');
                     setIsMobileMenuOpen(false);
                   }}
-                  className="mobile-menu-item glass-card flex items-center space-x-4 p-4 rounded-xl font-medium text-white hover:text-blue-300 hover:bg-white/5 transition-all duration-200"
+                  className="mobile-menu-item glass-card flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-white hover:text-blue-300 hover:bg-white/5 transition-all duration-200 w-full"
                 >
-                  <User className="w-6 h-6" />
-                  <span className="uppercase text-lg font-semibold tracking-wide">
+                  <User className="w-4 h-4" />
+                  {/* FIXED: Only mobile login text uses Chillax */}
+                  <span className="font-chillax uppercase text-xs font-semibold tracking-wide">
                     Login
                   </span>
                 </button>
-              </div>
-
-              {/* Optional: Quick Actions Row */}
-              <div className="mt-8 pt-6 border-t border-white/10">
-                <div className="flex justify-center space-x-4">
-                  <button 
-                    onClick={() => setIsSearchOpen(true)}
-                    className="glass-card p-3 rounded-lg text-white hover:text-blue-300 transition-colors"
-                  >
-                    <Search className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => router.push('/watchlist')}
-                    className="glass-card p-3 rounded-lg text-white hover:text-blue-300 transition-colors"
-                  >
-                    <Film className="w-5 h-5" />
-                  </button>
-                </div>
               </div>
             </div>
           </div>
